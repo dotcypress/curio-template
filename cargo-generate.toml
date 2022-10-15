@@ -1,4 +1,4 @@
 [template]
 ignore = [ 
-  "./src/assets/icons.bin"
+  "src/assets/icons.bin"
 ]
