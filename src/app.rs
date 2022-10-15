@@ -1,4 +1,7 @@
-use crate::ui::UI;
+use crate::{
+    assets::AppIcon,
+    ui::{Menu, UI},
+};
 use curio_bsp::protocol::nec::NecCommand;
 use klaptik::*;
 
@@ -17,11 +20,21 @@ pub enum AppRequest {
 
 pub struct App {
     pub frame: u8,
+    pub main_menu: Menu<AppIcon>,
 }
 
 impl App {
     pub fn new() -> Self {
-        Self { frame: 0 }
+        let main_menu = Menu::new(&[
+            AppIcon::Send,
+            AppIcon::Scan,
+            AppIcon::Replay,
+            AppIcon::Config,
+        ]);
+        Self {
+            frame: 0,
+            main_menu,
+        }
     }
 
     pub fn invalidate(&mut self, ui: &mut UI) {
@@ -31,9 +44,15 @@ impl App {
 
     pub fn handle_event(&mut self, ev: AppEvent) -> Option<AppRequest> {
         match ev {
-            AppEvent::ThumbMove(_) => {}
+            AppEvent::ThumbMove(p) => {
+                if p.y > 32 {
+                    self.main_menu.move_up();
+                } else if p.y < -32 {
+                    self.main_menu.move_down();
+                }
+            }
             AppEvent::ButtonA => defmt::info!("Button A"),
-            AppEvent::ButtonB => defmt::info!("Button b"),
+            AppEvent::ButtonB => defmt::info!("Button B"),
             AppEvent::IrCommand(cmd) => {
                 defmt::info!("IrCommand {} {} {}", cmd.addr, cmd.cmd, cmd.repeat)
             }
