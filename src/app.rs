@@ -29,7 +29,15 @@ impl App {
         ui.update(self);
     }
 
-    pub fn handle_event(&mut self, _ev: AppEvent) -> Option<AppRequest> {
+    pub fn handle_event(&mut self, ev: AppEvent) -> Option<AppRequest> {
+        match ev {
+            AppEvent::ThumbMove(_) => {}
+            AppEvent::ButtonA => defmt::info!("Button A"),
+            AppEvent::ButtonB => defmt::info!("Button b"),
+            AppEvent::IrCommand(cmd) => {
+                defmt::info!("IrCommand {} {} {}", cmd.addr, cmd.cmd, cmd.repeat)
+            }
+        }
         None
     }
 }
