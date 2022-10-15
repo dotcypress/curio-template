@@ -1,0 +1,4 @@
+[template]
+ignore = [ 
+  "./src/assets/icons.bin"
+]
