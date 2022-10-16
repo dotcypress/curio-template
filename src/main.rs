@@ -44,8 +44,9 @@ mod curio {
 
     #[init]
     fn init(ctx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let mut rcc = ctx.device.RCC.constrain();
         defmt::info!("init");
+        let mut rcc = ctx.device.RCC.constrain();
+
         let Curio {
             control,
             mut display,
@@ -64,6 +65,7 @@ mod curio {
             i2c::Config::new(400.kHz()),
             &mut rcc,
         );
+
         let mut ui_timer = ctx.device.TIM14.timer(&mut rcc);
         ui_timer.start(200.millis());
         ui_timer.listen();
@@ -77,7 +79,10 @@ mod curio {
 
         let app = App::new();
         let ui = UI::new();
+
         display.set_brightness(128);
+
+        defmt::info!("init done");
 
         (
             Shared {
@@ -117,8 +122,8 @@ mod curio {
         let mut app = ctx.shared.app;
         let mut control = ctx.shared.control;
 
-        let vec = control.lock(|ctrl| ctrl.thumb());
-        app.lock(|app| app.handle_event(AppEvent::ThumbMove(vec)))
+        let thumb = control.lock(|ctrl| ctrl.thumb());
+        app.lock(|app| app.handle_event(AppEvent::ThumbMove(thumb)))
             .map(app_request::spawn);
 
         ctx.local.ui_timer.clear_irq();
