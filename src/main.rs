@@ -12,15 +12,19 @@ mod ui;
 use defmt_rtt as _;
 
 use app::*;
+use curio_bsp::hal::flash::WriteErase;
+use curio_bsp::hal::gpio::SignalEdge;
 use curio_bsp::hal::power::*;
 use curio_bsp::hal::rcc::*;
 use curio_bsp::hal::timer::Timer;
+use curio_bsp::stm32::FLASH;
 use curio_bsp::*;
 use klaptik::Widget;
 use ui::*;
 
 #[rtic::app(device = stm32, peripherals = true, dispatchers = [CEC])]
 mod curio {
+
     use super::*;
 
     #[shared]
@@ -34,10 +38,10 @@ mod curio {
 
     #[local]
     struct Local {
-        ui: UI,
-        scb: stm32::SCB,
         pwr: Power,
-        rcc: Rcc,
+        scb: stm32::SCB,
+        flash: Option<FLASH>,
+        ui: Viewport,
         ui_timer: Timer<stm32::TIM14>,
         render_timer: Timer<stm32::TIM17>,
     }
@@ -45,10 +49,16 @@ mod curio {
     #[init]
     fn init(ctx: init::Context) -> (Shared, Local, init::Monotonics) {
         defmt::info!("init");
+        let scb = ctx.core.SCB;
+        let flash = Some(ctx.device.FLASH);
         let mut rcc = ctx.device.RCC.constrain();
 
+        let mut pwr = ctx.device.PWR.constrain(&mut rcc);
+        pwr.clear_standby_flag();
+        pwr.enable_wakeup_lane(WakeUp::Line4, SignalEdge::Falling);
+
         let Curio {
-            control,
+            mut control,
             mut display,
             i2c,
             ir,
@@ -67,23 +77,20 @@ mod curio {
         );
 
         let mut ui_timer = ctx.device.TIM14.timer(&mut rcc);
-        ui_timer.start(200.millis());
+        ui_timer.start(150.millis());
         ui_timer.listen();
 
         let mut render_timer = ctx.device.TIM17.timer(&mut rcc);
-        render_timer.start(50.millis());
+        render_timer.start(100.millis());
         render_timer.listen();
 
-        let pwr = ctx.device.PWR.constrain(&mut rcc);
-        let scb = ctx.core.SCB;
+        let options = Options::load();
+        display.set_brightness(options.backlight);
 
-        let app = App::new();
-        let ui = UI::new();
-
-        display.set_brightness(128);
+        let app = App::new(options, control.battery_voltage());
+        let ui = Viewport::new();
 
         defmt::info!("init done");
-
         (
             Shared {
                 app,
@@ -93,11 +100,11 @@ mod curio {
                 ir,
             },
             Local {
+                flash,
                 ui_timer,
                 ui,
                 render_timer,
                 pwr,
-                rcc,
                 scb,
             },
             init::Monotonics(),
@@ -109,12 +116,10 @@ mod curio {
         let mut app = ctx.shared.app;
         let mut control = ctx.shared.control;
 
-        match control.lock(|ctrl| ctrl.buttons()) {
-            (true, false) => app.lock(|app| app.handle_event(AppEvent::ButtonA)),
-            (false, true) => app.lock(|app| app.handle_event(AppEvent::ButtonB)),
-            _ => None,
+        if let Some(btn) = control.lock(|ctrl| ctrl.read_buttons()) {
+            app.lock(|app| app.handle_button(btn))
+                .map(app_request::spawn);
         }
-        .map(app_request::spawn);
     }
 
     #[task(binds = TIM14, local = [ui_timer], shared = [app, control])]
@@ -122,9 +127,10 @@ mod curio {
         let mut app = ctx.shared.app;
         let mut control = ctx.shared.control;
 
-        let thumb = control.lock(|ctrl| ctrl.thumb());
-        app.lock(|app| app.handle_event(AppEvent::ThumbMove(thumb)))
-            .map(app_request::spawn);
+        if let Some(btn) = control.lock(|ctrl| ctrl.read_dpad()) {
+            app.lock(|app| app.handle_button(btn))
+                .map(app_request::spawn);
+        }
 
         ctx.local.ui_timer.clear_irq();
     }
@@ -147,13 +153,17 @@ mod curio {
         let mut app = ctx.shared.app;
         let mut display = ctx.shared.display;
 
-        app.lock(|app| app.invalidate(ui));
+        app.lock(|app| {
+            app.handle_event(AppEvent::ClockTick)
+                .map(app_request::spawn);
+            ui.update(app);
+        });
         display.lock(|display| ui.render(display));
 
         render_timer.clear_irq();
     }
 
-    #[task(local = [pwr, rcc, scb], shared = [i2c, ir, display])]
+    #[task(local = [flash, pwr, scb], shared = [i2c, ir, display])]
     fn app_request(ctx: app_request::Context, req: AppRequest) {
         match req {
             AppRequest::SetBrightness(val) => {
@@ -166,11 +176,21 @@ mod curio {
             }
             AppRequest::SwitchOff => {
                 let pwr = ctx.local.pwr;
-                let mut display = ctx.shared.display;
-                display.lock(|display| display.power_off());
-                //TODO: Slow down clocks to 1MHz
-                pwr.set_mode(PowerMode::UltraLowPower(LowPowerMode::StopMode2));
+                pwr.clear_wakeup_flag(WakeUp::Line4);
+                pwr.set_mode(PowerMode::LowPower(LowPowerMode::Shutdown));
                 ctx.local.scb.set_sleepdeep();
+            }
+            AppRequest::StoreOptions(options) => {
+                if let Some(flash) = ctx.local.flash.take() {
+                    hal::cortex_m::interrupt::free(|_| {
+                        if let Ok(mut unlocked) = flash.unlock() {
+                            unlocked.erase_page(Options::PAGE).ok();
+                            let addr = Options::PAGE.to_address();
+                            unlocked.write(addr, &options.into_bytes()).ok();
+                            *ctx.local.flash = Some(unlocked.lock());
+                        }
+                    });
+                }
             }
         }
     }
@@ -178,7 +198,7 @@ mod curio {
     #[idle]
     fn idle(_: idle::Context) -> ! {
         loop {
-            rtic::export::nop();
+            rtic::export::wfi();
         }
     }
 }
