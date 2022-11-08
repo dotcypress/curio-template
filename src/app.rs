@@ -7,6 +7,8 @@ use klaptik::*;
 
 pub enum AppEvent {
     ClockTick,
+    Button(Button),
+    Thumb(i8, i8),
     IrCommand(NecCommand),
 }
 
@@ -61,9 +63,30 @@ impl App {
         self.active_widget = widget;
     }
 
-    pub fn handle_button(&mut self, btn: Button) -> Option<AppRequest> {
-        self.sleep_timeout = 0;
+    pub fn handle_event(&mut self, ev: AppEvent) -> Option<AppRequest> {
+        match ev {
+            AppEvent::ClockTick => {
+                self.frame = self.frame.wrapping_add(1);
+                self.sleep_timeout = self.sleep_timeout.wrapping_add(1);
+                if self.sleep_timeout / 10 > self.options.sleep_timeout as _ {
+                    Some(AppRequest::SwitchOff)
+                } else {
+                    None
+                }
+            }
+            AppEvent::IrCommand(cmd) => {
+                defmt::info!("cmd: {}", cmd.cmd);
+                self.rx_cmd = cmd;
+                None
+            }
+            AppEvent::Button(btn) => self.handle_button(btn),
+            AppEvent::Thumb(x, y) => self.handle_thumb(x, y),
+        }
+    }
 
+    fn handle_button(&mut self, btn: Button) -> Option<AppRequest> {
+        defmt::info!("btn: {}", defmt::Debug2Format(&btn));
+        self.sleep_timeout = 0;
         match self.active_widget {
             ViewportNode::MainMenu => match btn {
                 Button::A => match self.main_menu.selected() {
@@ -128,26 +151,24 @@ impl App {
         None
     }
 
-    pub fn handle_event(&mut self, ev: AppEvent) -> Option<AppRequest> {
-        match ev {
-            AppEvent::ClockTick => {
-                self.frame = self.frame.wrapping_add(1);
-                self.sleep_timeout = self.sleep_timeout.wrapping_add(1);
-                if self.sleep_timeout / 10 > self.options.sleep_timeout as _ {
-                    Some(AppRequest::SwitchOff)
-                } else {
-                    None
-                }
-            }
-            AppEvent::IrCommand(cmd) => {
-                self.rx_cmd = cmd;
-                None
+    fn handle_thumb(&mut self, x: i8, y: i8) -> Option<AppRequest> {
+        if self.active_widget == ViewportNode::About {
+            let x = (x + 63).clamp(0, 127) as u8 / 8;
+            let y = (y + 63).clamp(0, 127) as u8 / 8;
+            if x > 0 && y > 0 {
+                let cmd = NecCommand {
+                    addr: 42,
+                    repeat: false,
+                    cmd: y<< 4 | x,
+                };
+                return Some(AppRequest::TransmitIRCommand(cmd));
             }
         }
+        None
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Options {
     pub backlight: u8,
     pub sleep_timeout: u8,
