@@ -6,10 +6,7 @@ extern crate panic_halt;
 extern crate rtic;
 
 mod app;
-mod assets;
 mod ui;
-
-use defmt_rtt as _;
 
 use app::*;
 use curio_bsp::hal::flash::WriteErase;
@@ -20,6 +17,7 @@ use curio_bsp::hal::timer::Timer;
 use curio_bsp::stm32::FLASH;
 use curio_bsp::stm32::*;
 use curio_bsp::*;
+use klaptik::SpriteDisplay;
 use klaptik::Widget;
 use ui::*;
 
@@ -32,7 +30,7 @@ mod curio {
     struct Shared {
         app: App,
         control: Control,
-        display: Display,
+        display: SpriteDisplay<DisplayController, { SPRITES.len() }>,
         ir: IrTransceiver,
         i2c: I2cDev,
         exti: EXTI,
@@ -92,6 +90,8 @@ mod curio {
 
         let app = App::new(options, control.battery_voltage());
         let ui = Viewport::new();
+
+        let display = SpriteDisplay::new(display, SPRITES);
 
         defmt::info!("init done");
         (
@@ -197,7 +197,7 @@ mod curio {
         match req {
             AppRequest::SetBrightness(val) => {
                 let mut display = ctx.shared.display;
-                display.lock(|display| display.set_brightness(val));
+                display.lock(|display| display.canvas().set_brightness(val));
             }
             AppRequest::TransmitIRCommand(cmd) => {
                 let mut ir = ctx.shared.ir;

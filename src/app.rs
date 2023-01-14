@@ -1,9 +1,8 @@
-use crate::assets::MenuItem;
-use crate::ui::*;
 use curio_bsp::hal::flash::FlashPage;
 use curio_bsp::protocol::nec::NecCommand;
 use curio_bsp::Button;
 use klaptik::*;
+use crate::*;
 
 pub enum AppEvent {
     ClockTick,

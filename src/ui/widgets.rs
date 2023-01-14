@@ -1,16 +1,24 @@
 use crate::app::App;
-use crate::assets::*;
+use crate::ui::*;
 use core::fmt::Write;
-use curio_bsp::Display;
-use klaptik::*;
+
+widget!(
+    Background<()>,
+    Tile<Glyph>,
+    Asset::Background, 0,
+    Point::zero(),
+    Size::new(16, 16),
+    16, 8;
+);
+
 
 widget_group! {
     BacklightWidget<u8>,
     {
-        bg: Background, Point::zero(), Display::SIZE;
-        icon: MenuIcon, IconSprite, MenuItem::Backlight, Point::zero();
-        title: MenuIcon, MenuMediumSprite, MenuItem::Backlight, Point::new(24, 0);
-        brightness: Label<4>, FontSprite, "100%", Point::new(24, 24);
+        bg: Background;
+        icon: MenuIcon, Asset::Icon, MenuItem::Backlight, Point::zero();
+        title: MenuIcon, Asset::MenuSmall, MenuItem::Backlight, Point::new(24, 0);
+        brightness: Label<4>, Asset::Font, "100%", Point::new(24, 24), Size::new(16, 24);
     },
     |widget: &mut BacklightWidget, brightness: u8| {
         write!(widget.brightness, "{: >3}%",  brightness * 10).unwrap();
@@ -20,10 +28,10 @@ widget_group! {
 widget_group! {
     SleepTimeoutWidget<u8>,
     {
-        bg: Background, Point::zero(), Display::SIZE;
-        icon: MenuIcon, IconSprite, MenuItem::Sleep, Point::zero();
-        title: MenuIcon, MenuMediumSprite, MenuItem::Sleep, Point::new(24, 0);
-        value: Label<3>, FontSprite, "10s", Point::new(32, 24);
+        bg: Background;
+        icon: MenuIcon, Asset::Icon, MenuItem::Sleep, Point::zero();
+        title: MenuIcon, Asset::MenuSmall, MenuItem::Sleep, Point::new(24, 0);
+        value: Label<3>, Asset::Font, "10s", Point::new(32, 24), Size::new(16, 24);
     },
     |widget: &mut SleepTimeoutWidget, timeout: u8| {
         write!(widget.value, "{timeout}s").unwrap();
@@ -33,10 +41,10 @@ widget_group! {
 widget_group! {
     AboutWidget<&App>,
     {
-        bg: Background, Point::zero(), Display::SIZE;
-        icon: MenuIcon, IconSprite, MenuItem::Curio, Point::zero();
-        title: MenuIcon, MenuMediumSprite, MenuItem::Curio, Point::new(24, 0);
-        battery: GlyphIcon, BatterySprite, 0, Point::new(112, 0);
+        bg: Background;
+        icon: MenuIcon, Asset::Icon, MenuItem::Curio, Point::zero();
+        title: MenuIcon, Asset::MenuSmall, MenuItem::Curio, Point::new(24, 0);
+        battery: GlyphIcon, Asset::Battery, 0, Point::new(112, 0);
     },
     |widget: &mut AboutWidget, state: &App| {
         widget.battery.update(state.battery_voltage);
